@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Chatroom Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle">
+    <span class="theme-toggle-icon" id="themeIcon">☀</span>
+    <span id="themeText">Light</span>
+  </button>
+  <div class="container">
+    <div class="page-header">
+      <h1>Chatroom Manager</h1>
+      <p class="text-muted">Admin Panel</p>
+    </div>
+
+    <div id="adminArea" style="display: none;">
+      <button id="backToGeneral" class="btn-secondary mb-3">← Back to General Chat</button>
+      
+      <div class="card">
+        <div class="card-header">
+          <h3>Create New Private Chatroom</h3>
+        </div>
+        <div class="form-group">
+          <input id="roomName" type="text" placeholder="Enter chatroom name">
+        </div>
+        <button id="createRoom">Create Room</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Existing Private Chatrooms</h3>
+        </div>
+        <button id="refreshRooms" class="btn-secondary mb-2">  Refresh List</button>
+        <div id="chatrooms">
+          <p class="loading">Loading rooms...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, get, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD7lofjQ5AIFT6n-e1LpyployJxGdBChPE",
+      authDomain: "cosc-3657.firebaseapp.com",
+      databaseURL: "https://cosc-3657-default-rtdb.firebaseio.com",
+      projectId: "cosc-3657",
+      storageBucket: "cosc-3657.appspot.com",
+      messagingSenderId: "899690413890",
+      appId: "1:899690413890:web:2381f893e86abf3bc412db",
+      measurementId: "G-JJC34GHJZL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    let roomsLoaded = new Set();
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        const username = (user.displayName || user.email).toLowerCase();
+
+        get(ref(db, "roles/" + username)).then(roleSnap => {
+          const role = roleSnap.val();
+
+          if (roleSnap.exists() && role === "admin") {
+            document.getElementById("adminArea").style.display = "block";
+
+            document.getElementById("backToGeneral").onclick = () => {
+              window.location.href = "index.html";
+            };
+
+            document.getElementById("createRoom").onclick = () => {
+              const roomName = document.getElementById("roomName").value.trim().toLowerCase();
+              if (!roomName) {
+                alert("Please enter a room name");
+                return;
+              }
+              if (roomName === "general") {
+                alert("Cannot create a room named 'general' - it's reserved");
+                return;
+              }
+
+              get(ref(db, "chatrooms/" + roomName)).then(snapshot => {
+                if (snapshot.exists()) {
+                  alert("Room '" + roomName + "' already exists");
+                  return;
+                }
+
+                Promise.all([
+                  set(ref(db, "chatrooms/" + roomName), {
+                    members: { [username]: true },
+                    messages: {}
+                  }),
+                  set(ref(db, "userMemberships/" + username + "/" + roomName), true)
+                ]).then(() => {
+                  alert("Room created: " + roomName);
+                  document.getElementById("roomName").value = "";
+                }).catch(error => {
+                  console.error("Error creating room:", error);
+                  alert("Error creating room: " + error.message);
+                });
+              }).catch(error => {
+                console.error("Error checking room:", error);
+                alert("Error checking room: " + error.message);
+              });
+            };
+
+            function loadRooms() {
+              const roomsDiv = document.getElementById("chatrooms");
+              
+              get(ref(db, "chatrooms")).then(snapshot => {
+                if (snapshot.exists()) {
+                  roomsDiv.innerHTML = "";
+                  roomsLoaded.clear();
+                  
+                  const rooms = snapshot.val();
+                  let privateRoomCount = 0;
+                  
+                  Object.keys(rooms).forEach(roomName => {
+                    if (roomName !== "general") {
+                      addRoomToUI(roomName);
+                      privateRoomCount++;
+                    }
+                  });
+
+                  if (privateRoomCount === 0) {
+                    roomsDiv.innerHTML = '<p class="no-content">No private chatrooms yet. Create one above!</p>';
+                  }
+                } else {
+                  roomsDiv.innerHTML = '<p class="no-content">No chatrooms found.</p>';
+                }
+              }).catch(error => {
+                console.error("Error loading rooms:", error);
+                roomsDiv.innerHTML = '<p class="no-content">Error loading rooms.</p>';
+              });
+            }
+
+            loadRooms();
+
+            document.getElementById("refreshRooms").onclick = loadRooms;
+
+            const roomsRef = ref(db, "chatrooms");
+            onChildAdded(roomsRef, snapshot => {
+              const roomName = snapshot.key;
+              if (roomName !== "general" && !roomsLoaded.has(roomName)) {
+                const roomsDiv = document.getElementById("chatrooms");
+                const noRoomsMsg = roomsDiv.querySelector('.no-content');
+                if (noRoomsMsg) {
+                  noRoomsMsg.remove();
+                }
+                addRoomToUI(roomName);
+              }
+            });
+
+            function addRoomToUI(roomName) {
+              if (roomsLoaded.has(roomName)) return;
+              
+              roomsLoaded.add(roomName);
+              const roomsDiv = document.getElementById("chatrooms");
+
+              const roomDiv = document.createElement("div");
+              roomDiv.className = "room";
+              roomDiv.id = "room-" + roomName;
+              
+              const roomTitle = document.createElement("strong");
+              roomTitle.textContent = "❇ " + roomName;
+              roomDiv.appendChild(roomTitle);
+
+              const roomActions = document.createElement("div");
+              roomActions.className = "room-actions";
+
+              const openBtn = document.createElement("button");
+              openBtn.textContent = "Open";
+              openBtn.onclick = () => {
+                window.location.href = "chatroom.html?room=" + roomName;
+              };
+
+              const addMemberBtn = document.createElement("button");
+              addMemberBtn.className = "btn-secondary";
+              addMemberBtn.textContent = "Add Member";
+              addMemberBtn.onclick = () => {
+                const memberUsername = prompt("Enter username to add to " + roomName + ":");
+                if (memberUsername) {
+                  const memberUsernameLower = memberUsername.toLowerCase();
+                  get(ref(db, "usernames/" + memberUsernameLower)).then(snapshot => {
+                    if (snapshot.exists()) {
+                      Promise.all([
+                        set(ref(db, "chatrooms/" + roomName + "/members/" + memberUsernameLower), true),
+                        set(ref(db, "userMemberships/" + memberUsernameLower + "/" + roomName), true)
+                      ])
+                        .then(() => {
+                          alert("Added " + memberUsernameLower + " to " + roomName);
+                        })
+                        .catch(error => {
+                          alert("Error adding member: " + error.message);
+                        });
+                    } else {
+                      alert("User '" + memberUsernameLower + "' not found");
+                    }
+                  }).catch(error => {
+                    alert("Error checking user: " + error.message);
+                  });
+                }
+              };
+
+              roomActions.appendChild(openBtn);
+              roomActions.appendChild(addMemberBtn);
+              roomDiv.appendChild(roomActions);
+              roomsDiv.appendChild(roomDiv);
+            }
+          } else {
+            alert("Access denied. Admins only.");
+            window.location.href = "index.html";
+          }
+        }).catch(error => {
+          console.error("Error checking admin status:", error);
+          alert("Error checking admin status: " + error.message);
+          window.location.href = "index.html";
+        });
+      } else {
+        window.location.href = "login.html";
+      }
+    });
+  </script>
+  <script>
+  // Theme toggle functionality
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  const themeText = document.getElementById('themeText');
+  const htmlElement = document.documentElement;
+
+  // Load saved theme or default to dark
+  const currentTheme = localStorage.getItem('theme') || 'dark';
+  htmlElement.setAttribute('data-theme', currentTheme);
+  updateThemeUI(currentTheme);
+
+  // Toggle theme on button click
+  themeToggle.addEventListener('click', () => {
+    const newTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    htmlElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeUI(newTheme);
+  });
+
+  // Update UI elements
+  function updateThemeUI(theme) {
+    if (theme === 'light') {
+      themeIcon.textContent = '☾';
+      themeText.textContent = 'Dark';
+    } else {
+      themeIcon.textContent = '☀';
+      themeText.textContent = 'Light';
+    }
+  }
+</script>
+</body>
+</html>
