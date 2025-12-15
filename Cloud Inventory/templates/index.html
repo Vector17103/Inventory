@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Niroula's Landscaping — Inventory Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/styles.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <div class="logo">🌿</div>
+      <div>
+        <h1 class="title">Niroula's Landscaping</h1>
+        <p class="subtitle">Cloud-powered inventory tracker</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <ul class="menu">
+        <li><a href="/inventory" class="nav-btn active">Inventory</a></li>
+        <li><a href="/dashboard" class="nav-btn">Dashboard</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- Authentication Controls -->
+    <section class="card">
+      <h2 class="section-title">User Authentication</h2>
+      <div id="authControls" class="form-grid">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <div class="form-actions">
+          <button onclick="signup()" class="btn">Sign Up</button>
+          <button onclick="login()" class="btn primary">Login</button>
+          <button onclick="logout()" class="btn danger">Logout</button>
+        </div>
+      </div>
+      <p id="userInfo" class="muted"></p>
+    </section>
+
+    
+
+    <!-- Add Item Form -->
+    <section class="card" id="addSection">
+      <h2 class="section-title">Add item</h2>
+      <form id="addForm" class="form-grid" method="POST" action="/add" enctype="multipart/form-data">
+        <div class="form-field">
+          <label>Name</label>
+          <input type="text" name="name" placeholder="e.g., Maple Tree" required>
+        </div>
+        <div class="form-field">
+          <label>Quantity</label>
+          <input type="number" name="quantity" min="0" placeholder="e.g., 10" required>
+        </div>
+        <div class="form-field">
+          <label>Price</label>
+          <input type="number" step="0.01" name="price" min="0" placeholder="e.g., 120.00" required>
+        </div>
+        <div class="form-field">
+          <label>Category</label>
+          <select name="category" required>
+            <option value="" disabled selected>Select category</option>
+            <option>Plants & Trees</option>
+            <option>Soil, Mulch & Fertilizer</option>
+            <option>Stone, Gravel & Pavers</option>
+            <option>Tools & Equipment</option>
+            <option>Irrigation & Watering</option>
+            <option>Outdoor Décor & Accessories</option>
+            <option>Seasonal Items</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Image</label>
+          <input type="file" name="image" accept="image/*">
+          <img id="preview" src="" alt="Image preview" style="max-width: 200px; display: none; margin-top: 10px;">
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Add item</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Inventory List -->
+    <section class="card">
+      <div class="list-header">
+        <h2 class="section-title">Inventory</h2>
+        <div class="filters">
+          <input type="text" id="searchBox" placeholder="Search items...">
+          <select id="filterCategory">
+            <option value="All" selected>All categories</option>
+            <option>Plants & Trees</option>
+            <option>Soil, Mulch & Fertilizer</option>
+            <option>Stone, Gravel & Pavers</option>
+            <option>Tools & Equipment</option>
+            <option>Irrigation & Watering</option>
+            <option>Outdoor Décor & Accessories</option>
+            <option>Seasonal Items</option>
+          </select>
+        </div>
+      </div>
+      <div id="items"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Niroula's Landscaping — North Bay, ON</p>
+  </footer>
+
+  <script>
+	
+
+    // Firebase config (replace with your COSC4607 project settings)
+    const firebaseConfig = {
+ 	 apiKey: "AIzaSyBVa4WLcI8SUGXMH5aZTlyzC02_GNiEhlk",
+ 	 authDomain: "cosc-4607.firebaseapp.com",
+ 	 databaseURL: "https://cosc-4607-default-rtdb.firebaseio.com",
+	  projectId: "cosc-4607",
+	  storageBucket: "cosc-4607.firebasestorage.app",
+ 	 messagingSenderId: "860558940486",
+ 	 appId: "1:860558940486:web:49c45a2cfacba0ff666d47",
+  	measurementId: "G-0ZTYY41M64"
+	};
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // Authentication functions
+    async function signup() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  try {
+    const userCred = await auth.createUserWithEmailAndPassword(email, password);
+    const idToken = await userCred.user.getIdToken();
+    const res = await fetch('/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
+    const sessionData = await res.json();  // <-- get role here
+    document.getElementById('userInfo').textContent = "Signed up as " + email;
+
+    if (sessionData.role === "viewer") {
+      document.getElementById('addSection').classList.add('hidden');
+    } else {
+      document.getElementById('addSection').classList.remove('hidden');
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  try {
+    const userCred = await auth.signInWithEmailAndPassword(email, password);
+    const idToken = await userCred.user.getIdToken();
+    const res = await fetch('/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
+    const sessionData = await res.json();  // <-- get role here
+    document.getElementById('userInfo').textContent = "Logged in as " + email;
+
+    if (sessionData.role === "viewer") {
+      document.getElementById('addSection').classList.add('hidden');
+    } else {
+      document.getElementById('addSection').classList.remove('hidden');
+    }
+
+    loadItems();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+
+
+async function checkSession() {
+  try {
+    const res = await fetch('/auth/session', { method: 'GET' });
+    if (res.ok) {
+      const sessionData = await res.json();
+      currentRole = sessionData.role;
+      document.getElementById('userInfo').textContent =
+        "Logged in as " + sessionData.email;
+
+      // Hide Add Item form if viewer
+      if (currentRole === "viewer") {
+        document.getElementById('addSection').classList.add('hidden');
+      } else {
+        document.getElementById('addSection').classList.remove('hidden');
+      }
+    }
+  } catch (err) {
+    console.log("No active session");
+  }
+}
+
+
+
+    async function logout() {
+      await auth.signOut();
+      await fetch('/logout', { method: 'POST' });
+      document.getElementById('userInfo').textContent = "Logged out";
+    }
+
+    // Inventory functions
+    const itemsDiv = document.getElementById('items');
+    const filterSelect = document.getElementById('filterCategory');
+    const searchBox = document.getElementById('searchBox');
+
+    document.getElementById('addForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const res = await fetch('/add', { method: 'POST', body: formData });
+      if (res.ok) {
+        e.target.reset();
+        document.getElementById('preview').style.display = 'none';
+        loadItems();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to add item');
+      }
+    };
+
+    document.querySelector('input[name="image"]').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const preview = document.getElementById('preview');
+          preview.src = evt.target.result;
+          preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function groupByCategory(obj) {
+      const grouped = {};
+      Object.entries(obj).forEach(([id, item]) => {
+        const cat = item.category || 'Uncategorized';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push({ id, ...item });
+      });
+      return grouped;
+    }
+
+        function renderItems(data) {
+  const filter = filterSelect.value;
+  const searchTerm = searchBox.value.toLowerCase();
+  const grouped = groupByCategory(data || {});
+  const categories = filter === 'All' ? Object.keys(grouped) : [filter];
+
+  if (categories.length === 0) {
+    itemsDiv.innerHTML = '<p class="muted">No items found.</p>';
+    return;
+  }
+
+  itemsDiv.innerHTML = categories.map(cat => {
+    const list = (grouped[cat] || []).filter(item =>
+      item.name.toLowerCase().includes(searchTerm)
+    );
+
+    const cards = list.map(({ id, name, quantity, price, imageURL }) => `
+      <div class="item-card">
+        ${imageURL ? `<img src="${imageURL.replace('/upload/', '/upload/w_100,h_100,c_fill/')}" class="item-image">` : ''}
+
+        <div class="item-main">
+          <h3 class="item-name">${name}</h3>
+          <p class="item-meta">Qty: ${quantity} • Price: $${Number(price).toFixed(2)}</p>
+        </div>
+        <div class="item-actions">
+          <button class="btn small" onclick="updateQuantity('${id}', 'decrease')">-</button>
+          <button class="btn small" onclick="updateQuantity('${id}', 'increase')">+</button>
+          <button class="btn danger" onclick="deleteItem('${id}')">Delete</button>
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="category-block">
+        <h3 class="category-title">${cat}</h3>
+        <div class="items-grid">${cards || '<p class="muted">No items yet.</p>'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+
+
+    async function updateQuantity(id, action) {
+      const res = await fetch('/update_quantity/' + id, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      if (res.ok) {
+        loadItems();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to update quantity');
+      }
+    }
+
+    async function loadItems() {
+      const res = await fetch('/items');
+      const data = await res.json();
+      renderItems(data);
+    }
+
+    async function deleteItem(id) {
+      const res = await fetch('/delete/' + id, { method: 'DELETE' });
+      if (res.ok) {
+        loadItems();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to delete item');
+      }
+    }
+
+    // Event bindings
+    filterSelect.onchange = loadItems;
+    searchBox.oninput = loadItems;
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Initial load
+checkSession().then(() => {
+  loadItems();
+});
+    loadItems();
+  </script>
+</body>
+</html>

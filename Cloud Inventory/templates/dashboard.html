@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard - Niroula's Landscaping</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Chart.js for graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- External CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+<header class="header">
+  <div class="brand">
+    <div class="logo">🌿</div>
+    <div>
+      <h1 class="title">Niroula's Landscaping</h1>
+      <p class="subtitle">Inventory Dashboard</p>
+    </div>
+  </div>
+  <!-- Navigation Menu -->
+  <nav class="nav">
+    <ul>
+      <li><a href="/inventory">Inventory</a></li>
+      <li><a href="/dashboard" class="active">Dashboard</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+  <!-- User info -->
+  <section class="card">
+    <p>Logged in as: {{ user.email }} (Role: {{ user.role }})</p>
+  </section>
+  <!-- Stats cards -->
+  <section class="stats">
+    <div class="card">
+      <h2>Total Inventory Value</h2>
+      <p class="stat-number">${{ total_value }}</p>
+    </div>
+    <div class="card">
+      <h2>Total Items</h2>
+      <p class="stat-number">{{ total_items }}</p>
+    </div>
+  </section>
+
+  <!-- Category breakdown chart -->
+  <section class="card">
+    <h2>Category Breakdown (by Quantity)</h2>
+    <canvas id="categoryChart"></canvas>
+  </section>
+
+  <!-- Category value chart -->
+  <section class="card">
+    <h2>Category Breakdown (by Value)</h2>
+    <canvas id="valueChart"></canvas>
+  </section>
+</main>
+
+<footer class="footer">
+  <p>© <span id="year"></span> Niroula's Landscaping — North Bay, ON</p>
+</footer>
+
+<script>
+  // Footer year
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Pie chart for category counts
+  const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+  const categoryData = {
+    labels: {{ category_counts.keys()|list|tojson }},
+    datasets: [{
+      label: 'Items per Category',
+      data: {{ category_counts.values()|list|tojson }},
+      backgroundColor: ['#4CAF50','#2196F3','#FFC107','#FF5722','#9C27B0','#00BCD4','#8BC34A']
+    }]
+  };
+  new Chart(categoryCtx, { type: 'pie', data: categoryData });
+
+  // Bar chart for category values
+  const valueCtx = document.getElementById('valueChart').getContext('2d');
+  const valueData = {
+    labels: {{ category_values.keys()|list|tojson }},
+    datasets: [{
+      label: 'Total Value ($)',
+      data: {{ category_values.values()|list|tojson }},
+      backgroundColor: '#2196F3'
+    }]
+  };
+  new Chart(valueCtx, { type: 'bar', data: valueData });
+</script>
+</body>
+</html>
