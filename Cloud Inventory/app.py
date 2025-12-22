@@ -138,7 +138,7 @@ def create_session():
             id_token,
             httponly=True,        # mitigate XSS
             secure=True,          # require HTTPS in production
-            samesite='Lax',       # CSRF protection with forms
+            samesite='None',       # CSRF protection with forms
             max_age=60 * 60       # 1 hour
         )
         return resp
